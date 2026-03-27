@@ -3,24 +3,35 @@
 
 #[cfg(target_arch = "wasm32")]
 mod blitz_wasm;
+#[cfg(target_arch = "wasm32")]
 mod document_url;
 
+#[cfg(target_arch = "wasm32")]
 use html5ever::driver::parse_document;
+#[cfg(target_arch = "wasm32")]
 use html5ever::tendril::TendrilSink;
+#[cfg(target_arch = "wasm32")]
 use markup5ever::local_name;
+#[cfg(target_arch = "wasm32")]
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
+#[cfg(target_arch = "wasm32")]
 use serde::Serialize;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::JsFuture;
 #[cfg(target_arch = "wasm32")]
 use web_sys::CanvasRenderingContext2d;
+#[cfg(target_arch = "wasm32")]
 use web_sys::HtmlCanvasElement;
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(start)]
 pub fn main() {
     console_error_panic_hook::set_once();
 }
 
+#[cfg(target_arch = "wasm32")]
 #[derive(Serialize)]
 pub struct RenderedPage {
     pub url: String,
@@ -29,6 +40,7 @@ pub struct RenderedPage {
     pub links: Vec<String>,
 }
 
+#[cfg(target_arch = "wasm32")]
 #[derive(Serialize)]
 pub struct PaintResult {
     pub url: String,
@@ -37,10 +49,12 @@ pub struct PaintResult {
     pub height_css_px: f64,
 }
 
+#[cfg(target_arch = "wasm32")]
 pub(crate) struct AnalyzedPage {
     pub page: RenderedPage,
 }
 
+#[cfg(target_arch = "wasm32")]
 fn parse_rcdom(html: &str) -> Result<RcDom, String> {
     let dom = RcDom::default();
     parse_document(dom, html5ever::ParseOpts::default())
@@ -49,6 +63,7 @@ fn parse_rcdom(html: &str) -> Result<RcDom, String> {
         .map_err(|e| e.to_string())
 }
 
+#[cfg(target_arch = "wasm32")]
 fn analyze_page(html: &str, page_url: &str) -> Result<AnalyzedPage, String> {
     let dom = parse_rcdom(html)?;
     let root = dom.document.clone();
@@ -132,18 +147,7 @@ pub async fn paint_document_html(
     serde_wasm_bindgen::to_value(&out).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-#[wasm_bindgen(js_name = paintDocumentHtml)]
-pub async fn paint_document_html(
-    _canvas: &HtmlCanvasElement,
-    _html: &str,
-    _page_url: &str,
-    _css_width: f64,
-    _device_pixel_ratio: f64,
-) -> Result<JsValue, JsValue> {
-    Err(JsValue::from_str("paintDocumentHtml is wasm-only"))
-}
-
+#[cfg(target_arch = "wasm32")]
 async fn fetch_text_with_cors(url: &str) -> Result<String, JsValue> {
     let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
     let opts = web_sys::RequestInit::new();
@@ -239,17 +243,7 @@ pub async fn fetch_and_paint(
     serde_wasm_bindgen::to_value(&out).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-#[wasm_bindgen(js_name = fetchAndPaint)]
-pub async fn fetch_and_paint(
-    _canvas: &HtmlCanvasElement,
-    _url: &str,
-    _css_width: f64,
-    _device_pixel_ratio: f64,
-) -> Result<JsValue, JsValue> {
-    Err(JsValue::from_str("fetchAndPaint is wasm-only"))
-}
-
+#[cfg(target_arch = "wasm32")]
 fn find_first_element<F>(handle: &Handle, pred: F) -> Option<Handle>
 where
     F: Copy + Fn(&Handle) -> bool,
@@ -265,6 +259,7 @@ where
     None
 }
 
+#[cfg(target_arch = "wasm32")]
 fn collect_text(handle: &Handle) -> String {
     match &handle.data {
         NodeData::Text { contents } => contents.borrow().to_string(),
@@ -277,6 +272,7 @@ fn collect_text(handle: &Handle) -> String {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 fn collect_visible_text(handle: &Handle) -> String {
     match &handle.data {
         NodeData::Text { contents } => contents.borrow().to_string(),
@@ -307,6 +303,7 @@ fn collect_visible_text(handle: &Handle) -> String {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 fn collect_hrefs(handle: &Handle, out: &mut Vec<String>) {
     if let NodeData::Element { name, attrs, .. } = &handle.data {
         if name.local == local_name!("a") {
@@ -352,6 +349,7 @@ fn collect_stylesheet_hrefs(handle: &Handle, out: &mut Vec<String>) {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 fn collapse_ws(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
