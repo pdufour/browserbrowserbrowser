@@ -9,12 +9,15 @@ use blitz_paint::paint_scene;
 use blitz_traits::net::DummyNetProvider;
 use blitz_traits::shell::{ColorScheme, DummyShellProvider, Viewport};
 use std::sync::Arc;
+use vello::wgpu::{
+    self, BufferDescriptor, BufferUsages, Extent3d, TexelCopyBufferInfo, TexelCopyBufferLayout,
+    TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
+};
+use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{HtmlCanvasElement, ImageData};
-use vello::wgpu::{self, BufferDescriptor, BufferUsages, Extent3d, TexelCopyBufferInfo, TexelCopyBufferLayout, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor};
 use wgpu_context::WGPUContext;
-use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene};
 
 use crate::PaintResult;
 
@@ -51,8 +54,6 @@ async fn fetch_bytes_with_cors(url: &str) -> Result<Vec<u8>, JsValue> {
 }
 
 fn inject_wasm_font_fallback(html: &str) -> String {
-    // On wasm, generic/system family resolution can fail even when font bytes are available.
-    // Force a known-loaded family stack so text shaping and layout produce visible output.
     let style = "<style>html,body,*{font-family:'Inter','Noto Sans','Roboto',sans-serif !important;}</style>";
     if html.contains("</head>") {
         html.replacen("</head>", &(style.to_string() + "</head>"), 1)
@@ -83,7 +84,6 @@ pub async fn paint_blitz_async(
         },
     );
 
-    // WASM commonly has no usable "system" fonts. Load one explicit font so text renders.
     let mut loaded_any_font = false;
     for url in DEFAULT_FONT_URLS {
         if let Ok(font_bytes) = fetch_bytes_with_cors(url).await {
@@ -153,7 +153,9 @@ pub async fn paint_blitz_async(
         sample_count: 1,
         dimension: TextureDimension::D2,
         format: TextureFormat::Rgba8Unorm,
-        usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC | TextureUsages::STORAGE_BINDING,
+        usage: TextureUsages::RENDER_ATTACHMENT
+            | TextureUsages::COPY_SRC
+            | TextureUsages::STORAGE_BINDING,
         view_formats: &[],
     });
     let texture_view = texture.create_view(&TextureViewDescriptor::default());
@@ -200,9 +202,12 @@ pub async fn paint_blitz_async(
         mapped_at_creation: false,
     });
 
-    let mut encoder = device_handle
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("blitz-copy") });
+    let mut encoder =
+        device_handle
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("blitz-copy"),
+            });
     encoder.copy_texture_to_buffer(
         texture.as_image_copy(),
         TexelCopyBufferInfo {
@@ -258,18 +263,13 @@ pub async fn paint_blitz_async(
     ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
         .map_err(|_| JsValue::from_str("setTransform"))?;
 
-    let data = ImageData::new_with_u8_clamped_array_and_sh(
-        wasm_bindgen::Clamped(&rgba),
-        phys_w,
-        phys_h,
-    )
-    .map_err(|e| JsValue::from_str(&format!("ImageData: {e:?}")))?;
+    let data =
+        ImageData::new_with_u8_clamped_array_and_sh(wasm_bindgen::Clamped(&rgba), phys_w, phys_h)
+            .map_err(|e| JsValue::from_str(&format!("ImageData: {e:?}")))?;
     ctx.put_image_data(&data, 0.0, 0.0)
         .map_err(|_| JsValue::from_str("putImageData"))?;
 
     let height_css_px = phys_h as f64 / dpr;
 
-    Ok(PaintResult {
-        height_css_px,
-    })
+    Ok(PaintResult { height_css_px })
 }
