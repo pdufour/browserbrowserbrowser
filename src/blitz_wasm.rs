@@ -54,6 +54,17 @@ async fn fetch_bytes_with_cors(url: &str) -> Result<Vec<u8>, JsValue> {
     Ok(out)
 }
 
+fn inject_wasm_font_fallback(html: &str) -> String {
+    // On wasm, generic/system family resolution can fail even when font bytes are available.
+    // Force a known-loaded family stack so text shaping and layout produce visible output.
+    let style = "<style>html,body,*{font-family:'Inter','Noto Sans','Roboto',sans-serif !important;}</style>";
+    if html.contains("</head>") {
+        html.replacen("</head>", &(style.to_string() + "</head>"), 1)
+    } else {
+        format!("{style}{html}")
+    }
+}
+
 pub async fn paint_blitz_async(
     canvas: &HtmlCanvasElement,
     html: &str,
@@ -62,12 +73,13 @@ pub async fn paint_blitz_async(
     css_w: f64,
     dpr: f64,
 ) -> Result<PaintResult, JsValue> {
+    let html = inject_wasm_font_fallback(html);
     let dpr = dpr.max(1.0);
     let css_w = css_w.max(120.0);
     let phys_w = (css_w * dpr).round().max(1.0) as u32;
 
     let mut doc = HtmlDocument::from_html(
-        html,
+        &html,
         DocumentConfig {
             base_url: Some(page_url.to_string()),
             net_provider: Some(Arc::new(DummyNetProvider::default())),
