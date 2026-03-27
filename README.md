@@ -10,7 +10,7 @@ Okay but really how does it work.
 
 ## Architecture
 
-wasm-pack builds a wasm binary that call out to Servos APIs: [html5ever](https://github.com/servo/html5ever) and [stylo](https://github.com/servo/stylo/), sometimes directly sometimes through [Blitz](https://github.com/DioxusLabs/blitz) APIs. Servo understands CSS and HTML and renders the page to an image via **[Vello](https://github.com/linebender/vello) which is a WebGPU renderer.
+wasm-pack builds a wasm binary that call out to Servos APIs: [html5ever](https://github.com/servo/html5ever) and [stylo](https://github.com/servo/stylo/), sometimes directly sometimes through [Blitz](https://github.com/DioxusLabs/blitz) APIs. Servo understands CSS and HTML and renders the page to an image via [Vello](https://github.com/linebender/vello) which is a WebGPU renderer.
 
 You can see **[WASM support #160](https://github.com/DioxusLabs/blitz/issues/160)** for the inception of this project.
 
