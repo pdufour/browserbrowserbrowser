@@ -1,7 +1,6 @@
 //! Full HTML/CSS paint in the page using **Blitz** (Stylo + Taffy + Vello) → RGBA → canvas `ImageData`.
 //! Requires a browser with **WebGPU** support.
 
-use crate::RenderedPage;
 use anyrender_vello::VelloScenePainter;
 use blitz_dom::DocumentConfig;
 use blitz_dom::net::{Resource, ResourceLoadResponse};
@@ -69,7 +68,6 @@ pub async fn paint_blitz_async(
     canvas: &HtmlCanvasElement,
     html: &str,
     page_url: &str,
-    meta: &RenderedPage,
     css_w: f64,
     dpr: f64,
 ) -> Result<PaintResult, JsValue> {
@@ -270,9 +268,6 @@ pub async fn paint_blitz_async(
     let height_css_px = phys_h as f64 / dpr;
 
     Ok(PaintResult {
-        url: meta.url.clone(),
-        title: meta.title.clone(),
-        links: meta.links.clone(),
         height_css_px,
     })
 }

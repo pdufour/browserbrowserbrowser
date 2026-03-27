@@ -86,16 +86,9 @@
       }
       .layout {
         flex: 1;
-        display: grid;
-        grid-template-columns: 1fr 280px;
-        gap: 0.75rem;
+        display: block;
         padding: 0.75rem;
         min-height: 0;
-      }
-      @media (max-width: 900px) {
-        .layout {
-          grid-template-columns: 1fr;
-        }
       }
       .canvas-shell {
         border: 1px solid var(--border);
@@ -107,44 +100,6 @@
       #page {
         display: block;
         width: 100%;
-        vertical-align: top;
-      }
-      .panel {
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        background: var(--surface);
-        padding: 0.85rem 1rem;
-        overflow: auto;
-        max-height: calc(100vh - 7rem);
-      }
-      .panel h2 {
-        margin: 0 0 0.5rem;
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: var(--muted);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-      .panel .doc-title {
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--accent);
-        margin: 0 0 0.35rem;
-      }
-      .panel .meta {
-        font-size: 0.78rem;
-        color: var(--muted);
-        word-break: break-all;
-        margin-bottom: 0.75rem;
-      }
-      .panel ul {
-        margin: 0;
-        padding-left: 1.1rem;
-        font-size: 0.82rem;
-      }
-      .panel li {
-        margin: 0.25rem 0;
-        word-break: break-all;
       }
       .viewport {
         padding: 1rem;
@@ -166,42 +121,25 @@
         value="https://corsproxy.io/?https://news.ycombinator.com/"
       />
       <button type="button" class="primary" id="go">Go</button>
-      <button type="button" id="demo">Demo HTML</button>
     </div>
     <div class="hint">
-      Rust parses with <strong>html5ever</strong> and renders to canvas in WASM.
-      Links use the real page URL behind a proxy when applicable. <strong>Go</strong> fetches HTML; CORS still applies.
+      Blitz renders HTML/CSS to canvas in WASM (WebGPU required). CORS still applies.
     </div>
     <div class="layout">
       <div class="canvas-shell" id="canvas-shell">
         <canvas id="page" width="300" height="150" hidden aria-label="Rendered page"></canvas>
         <div class="viewport" id="placeholder">Loading WASM…</div>
       </div>
-      <aside class="panel" id="panel">
-        <h2>Document</h2>
-        <p class="doc-title" id="doc-title">—</p>
-        <div class="meta" id="doc-url">—</div>
-        <h2>Links</h2>
-        <ul id="link-list"><li class="muted">—</li></ul>
-      </aside>
     </div>
 
     <script type="module">
-      import init, {
-        fetchAndPaint,
-        paintDocumentHtml,
-      } from "./pkg/inner_browser.js";
+      import init, { fetchAndPaint } from "./pkg/inner_browser.js";
 
       const canvas = document.getElementById("page");
       const shell = document.getElementById("canvas-shell");
       const placeholder = document.getElementById("placeholder");
-      const panel = document.getElementById("panel");
-      const docTitleEl = document.getElementById("doc-title");
-      const docUrlEl = document.getElementById("doc-url");
-      const linkList = document.getElementById("link-list");
       const urlInput = document.getElementById("url");
       const goBtn = document.getElementById("go");
-      const demoBtn = document.getElementById("demo");
 
       function escapeHtml(s) {
         return s
@@ -209,16 +147,6 @@
           .replaceAll("<", "&lt;")
           .replaceAll(">", "&gt;")
           .replaceAll('"', "&quot;");
-      }
-
-      function showPanel(meta) {
-        docTitleEl.textContent = meta.title || "(no title)";
-        docUrlEl.textContent = meta.url || "";
-        if (meta.links?.length) {
-          linkList.innerHTML = meta.links.map((h) => `<li>${escapeHtml(h)}</li>`).join("");
-        } else {
-          linkList.innerHTML = '<li class="muted">No links found</li>';
-        }
       }
 
       function showError(msg) {
@@ -232,7 +160,7 @@
       }
 
       async function runPaint(fn) {
-        goBtn.disabled = demoBtn.disabled = true;
+        goBtn.disabled = true;
         placeholder.hidden = false;
         placeholder.textContent = "Rendering…";
         canvas.hidden = true;
@@ -244,11 +172,10 @@
           canvas.hidden = false;
           canvas.style.width = "100%";
           canvas.style.height = `${meta.height_css_px}px`;
-          showPanel(meta);
         } catch (e) {
           showError(e instanceof Error ? e.message : String(e));
         } finally {
-          goBtn.disabled = demoBtn.disabled = false;
+          goBtn.disabled = false;
         }
       }
 
@@ -259,24 +186,6 @@
         const url = urlInput.value.trim();
         if (!url) return;
         runPaint((w, dpr) => fetchAndPaint(canvas, url, w, dpr));
-      });
-
-      demoBtn.addEventListener("click", () => {
-        const html = `<!DOCTYPE html><html><head><title>Demo page</title></head>
-          <body>
-            <h1>Hello from demo HTML</h1>
-            <p>This exercises the parser and canvas renderer without the network.</p>
-            <hr/>
-            <h2>List</h2>
-            <ul><li>One</li><li>Two</li></ul>
-            <pre>fn main() {
-  println!("preformatted");
-}</pre>
-            <p><a href="/foo">relative</a> · <a href="https://example.com/abs">absolute</a></p>
-          </body></html>`;
-        runPaint((w, dpr) =>
-          paintDocumentHtml(canvas, html, "https://demo.invalid/page", w, dpr),
-        );
       });
 
     </script>

@@ -1,60 +1,30 @@
 //! Inner “browser”: WASM build uses **Dioxus Blitz** (Stylo + Taffy + Vello) to render HTML/CSS offscreen,
 //! then draws RGBA into `<canvas>`. Requires WebGPU.
+#![cfg(target_arch = "wasm32")]
 
-#[cfg(target_arch = "wasm32")]
 mod blitz_wasm;
-#[cfg(target_arch = "wasm32")]
 mod document_url;
 
-#[cfg(target_arch = "wasm32")]
 use html5ever::driver::parse_document;
-#[cfg(target_arch = "wasm32")]
 use html5ever::tendril::TendrilSink;
-#[cfg(target_arch = "wasm32")]
 use markup5ever::local_name;
-#[cfg(target_arch = "wasm32")]
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
-#[cfg(target_arch = "wasm32")]
 use serde::Serialize;
-#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
-#[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::JsFuture;
-#[cfg(target_arch = "wasm32")]
 use web_sys::CanvasRenderingContext2d;
-#[cfg(target_arch = "wasm32")]
 use web_sys::HtmlCanvasElement;
 
-#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(start)]
 pub fn main() {
     console_error_panic_hook::set_once();
 }
 
-#[cfg(target_arch = "wasm32")]
-#[derive(Serialize)]
-pub struct RenderedPage {
-    pub url: String,
-    pub title: String,
-    pub text: String,
-    pub links: Vec<String>,
-}
-
-#[cfg(target_arch = "wasm32")]
 #[derive(Serialize)]
 pub struct PaintResult {
-    pub url: String,
-    pub title: String,
-    pub links: Vec<String>,
     pub height_css_px: f64,
 }
 
-#[cfg(target_arch = "wasm32")]
-pub(crate) struct AnalyzedPage {
-    pub page: RenderedPage,
-}
-
-#[cfg(target_arch = "wasm32")]
 fn parse_rcdom(html: &str) -> Result<RcDom, String> {
     let dom = RcDom::default();
     parse_document(dom, html5ever::ParseOpts::default())
@@ -63,57 +33,6 @@ fn parse_rcdom(html: &str) -> Result<RcDom, String> {
         .map_err(|e| e.to_string())
 }
 
-#[cfg(target_arch = "wasm32")]
-fn analyze_page(html: &str, page_url: &str) -> Result<AnalyzedPage, String> {
-    let dom = parse_rcdom(html)?;
-    let root = dom.document.clone();
-
-    let title = find_first_element(&root, |h| {
-        matches!(
-            &h.data,
-            NodeData::Element { name, .. } if name.local == local_name!("title")
-        )
-    })
-    .map(|h| collect_text(&h))
-    .unwrap_or_default();
-    let title = html_escape::decode_html_entities(&title).to_string();
-
-    let text = find_first_element(&root, |h| {
-        matches!(
-            &h.data,
-            NodeData::Element { name, .. } if name.local == local_name!("body")
-        )
-    })
-    .map(|h| collect_visible_text(&h))
-    .unwrap_or_else(|| collect_visible_text(&root));
-
-    let mut links = Vec::new();
-    collect_hrefs(&root, &mut links);
-    let base = document_url::effective_base_url(page_url, &root);
-    let links: Vec<String> = links
-        .into_iter()
-        .filter(|h| !h.starts_with('#') && h != "javascript:void(0)")
-        .take(100)
-        .filter_map(|h| {
-            if let Some(ref b) = base {
-                b.join(&h).ok().map(|u| u.to_string())
-            } else {
-                Some(h)
-            }
-        })
-        .collect();
-
-    let page = RenderedPage {
-        url: page_url.to_string(),
-        title: title.clone(),
-        text: collapse_ws(&text),
-        links,
-    };
-
-    Ok(AnalyzedPage { page })
-}
-
-#[cfg(target_arch = "wasm32")]
 pub(crate) fn canvas_context(
     canvas: &HtmlCanvasElement,
 ) -> Result<CanvasRenderingContext2d, JsValue> {
@@ -125,29 +44,6 @@ pub(crate) fn canvas_context(
         .map_err(|_| JsValue::from_str("2d context"))
 }
 
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen(js_name = paintDocumentHtml)]
-pub async fn paint_document_html(
-    canvas: &HtmlCanvasElement,
-    html: &str,
-    page_url: &str,
-    css_width: f64,
-    device_pixel_ratio: f64,
-) -> Result<JsValue, JsValue> {
-    let analyzed = analyze_page(html, page_url).map_err(|e| JsValue::from_str(&e))?;
-    let out = blitz_wasm::paint_blitz_async(
-        canvas,
-        html,
-        page_url,
-        &analyzed.page,
-        css_width,
-        device_pixel_ratio,
-    )
-    .await?;
-    serde_wasm_bindgen::to_value(&out).map_err(|e| JsValue::from_str(&e.to_string()))
-}
-
-#[cfg(target_arch = "wasm32")]
 async fn fetch_text_with_cors(url: &str) -> Result<String, JsValue> {
     let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
     let opts = web_sys::RequestInit::new();
@@ -178,7 +74,6 @@ async fn fetch_text_with_cors(url: &str) -> Result<String, JsValue> {
         .ok_or_else(|| JsValue::from_str("empty body"))
 }
 
-#[cfg(target_arch = "wasm32")]
 async fn inline_stylesheets_for_blitz(html: &str, fetch_url: &str) -> String {
     let Ok(dom) = parse_rcdom(html) else {
         return html.to_string();
@@ -220,7 +115,6 @@ async fn inline_stylesheets_for_blitz(html: &str, fetch_url: &str) -> String {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(js_name = fetchAndPaint)]
 pub async fn fetch_and_paint(
     canvas: &HtmlCanvasElement,
@@ -230,96 +124,11 @@ pub async fn fetch_and_paint(
 ) -> Result<JsValue, JsValue> {
     let html = fetch_text_with_cors(url).await?;
     let html = inline_stylesheets_for_blitz(&html, url).await;
-    let analyzed = analyze_page(&html, url).map_err(|e| JsValue::from_str(&e))?;
-    let out = blitz_wasm::paint_blitz_async(
-        canvas,
-        &html,
-        url,
-        &analyzed.page,
-        css_width,
-        device_pixel_ratio,
-    )
-    .await?;
+    let out =
+        blitz_wasm::paint_blitz_async(canvas, &html, url, css_width, device_pixel_ratio).await?;
     serde_wasm_bindgen::to_value(&out).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
-#[cfg(target_arch = "wasm32")]
-fn find_first_element<F>(handle: &Handle, pred: F) -> Option<Handle>
-where
-    F: Copy + Fn(&Handle) -> bool,
-{
-    if pred(handle) {
-        return Some(handle.clone());
-    }
-    for child in handle.children.borrow().iter() {
-        if let Some(h) = find_first_element(child, pred) {
-            return Some(h);
-        }
-    }
-    None
-}
-
-#[cfg(target_arch = "wasm32")]
-fn collect_text(handle: &Handle) -> String {
-    match &handle.data {
-        NodeData::Text { contents } => contents.borrow().to_string(),
-        _ => handle
-            .children
-            .borrow()
-            .iter()
-            .map(collect_text)
-            .collect::<String>(),
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn collect_visible_text(handle: &Handle) -> String {
-    match &handle.data {
-        NodeData::Text { contents } => contents.borrow().to_string(),
-        NodeData::Element { name, .. } => {
-            let skip = name.local == local_name!("script")
-                || name.local == local_name!("style")
-                || name.local == local_name!("noscript");
-            if skip {
-                return String::new();
-            }
-            let parts: Vec<String> = handle
-                .children
-                .borrow()
-                .iter()
-                .map(collect_visible_text)
-                .filter(|s| !s.is_empty())
-                .collect();
-            parts.join(" ")
-        }
-        _ => handle
-            .children
-            .borrow()
-            .iter()
-            .map(collect_visible_text)
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join(" "),
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn collect_hrefs(handle: &Handle, out: &mut Vec<String>) {
-    if let NodeData::Element { name, attrs, .. } = &handle.data {
-        if name.local == local_name!("a") {
-            for a in attrs.borrow().iter() {
-                if a.name.local == local_name!("href") {
-                    out.push(a.value.to_string());
-                }
-            }
-        }
-    }
-    for child in handle.children.borrow().iter() {
-        collect_hrefs(child, out);
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
 fn collect_stylesheet_hrefs(handle: &Handle, out: &mut Vec<String>) {
     if let NodeData::Element { name, attrs, .. } = &handle.data {
         if name.local == local_name!("link") {
@@ -347,9 +156,4 @@ fn collect_stylesheet_hrefs(handle: &Handle, out: &mut Vec<String>) {
     for child in handle.children.borrow().iter() {
         collect_stylesheet_hrefs(child, out);
     }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn collapse_ws(s: &str) -> String {
-    s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
