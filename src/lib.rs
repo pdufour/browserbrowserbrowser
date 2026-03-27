@@ -1,7 +1,9 @@
-//! Inner “browser”: **Servo html5ever** parses HTML; we extract structure and **paint** a readable
-//! layout to a `<canvas>` using real `measureText` wrapping (not Servo/WebRender paint).
-mod flow;
-mod paint_canvas;
+//! Inner “browser”: WASM build uses **Dioxus Blitz** (Stylo + Taffy + Vello) to render HTML/CSS offscreen,
+//! then draws RGBA into `<canvas>`. Requires WebGPU.
+
+mod document_url;
+#[cfg(target_arch = "wasm32")]
+mod blitz_wasm;
 
 use html5ever::driver::parse_document;
 use html5ever::tendril::TendrilSink;
@@ -33,10 +35,14 @@ pub struct PaintResult {
     pub height_css_px: f64,
 }
 
+pub(crate) struct AnalyzedPage {
+    pub page: RenderedPage,
+}
+
 #[wasm_bindgen(js_name = renderDocument)]
 pub fn render_document(html: &str, page_url: &str) -> Result<JsValue, JsValue> {
-    let (page, _) = analyze_page(html, page_url).map_err(|e| JsValue::from_str(&e))?;
-    serde_wasm_bindgen::to_value(&page).map_err(|e| JsValue::from_str(&e.to_string()))
+    let analyzed = analyze_page(html, page_url).map_err(|e| JsValue::from_str(&e))?;
+    serde_wasm_bindgen::to_value(&analyzed.page).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 fn parse_rcdom(html: &str) -> Result<RcDom, String> {
@@ -47,7 +53,7 @@ fn parse_rcdom(html: &str) -> Result<RcDom, String> {
         .map_err(|e| e.to_string())
 }
 
-fn analyze_page(html: &str, page_url: &str) -> Result<(RenderedPage, Vec<flow::FlowBlock>), String> {
+fn analyze_page(html: &str, page_url: &str) -> Result<AnalyzedPage, String> {
     let dom = parse_rcdom(html)?;
     let root = dom.document.clone();
 
@@ -72,7 +78,7 @@ fn analyze_page(html: &str, page_url: &str) -> Result<(RenderedPage, Vec<flow::F
 
     let mut links = Vec::new();
     collect_hrefs(&root, &mut links);
-    let base = url::Url::parse(page_url).ok();
+    let base = document_url::effective_base_url(page_url, &root);
     let links: Vec<String> = links
         .into_iter()
         .filter(|h| !h.starts_with('#') && h != "javascript:void(0)")
@@ -86,15 +92,6 @@ fn analyze_page(html: &str, page_url: &str) -> Result<(RenderedPage, Vec<flow::F
         })
         .collect();
 
-    let body = find_first_element(&root, |h| {
-        matches!(
-            &h.data,
-            NodeData::Element { name, .. } if name.local == local_name!("body")
-        )
-    })
-    .unwrap_or_else(|| root.clone());
-    let blocks = flow::extract_flow(&body);
-
     let page = RenderedPage {
         url: page_url.to_string(),
         title: title.clone(),
@@ -102,10 +99,10 @@ fn analyze_page(html: &str, page_url: &str) -> Result<(RenderedPage, Vec<flow::F
         links,
     };
 
-    Ok((page, blocks))
+    Ok(AnalyzedPage { page })
 }
 
-fn canvas_context(canvas: &HtmlCanvasElement) -> Result<CanvasRenderingContext2d, JsValue> {
+pub(crate) fn canvas_context(canvas: &HtmlCanvasElement) -> Result<CanvasRenderingContext2d, JsValue> {
     canvas
         .get_context("2d")
         .map_err(|_| JsValue::from_str("canvas 2d"))?
@@ -114,43 +111,112 @@ fn canvas_context(canvas: &HtmlCanvasElement) -> Result<CanvasRenderingContext2d
         .map_err(|_| JsValue::from_str("2d context"))
 }
 
-/// Parse `html`, lay out with **`measureText`**, and paint to `canvas`. Returns metadata and content height (CSS px).
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(js_name = paintDocumentHtml)]
-pub fn paint_document_html(
+pub async fn paint_document_html(
     canvas: &HtmlCanvasElement,
     html: &str,
     page_url: &str,
     css_width: f64,
     device_pixel_ratio: f64,
 ) -> Result<JsValue, JsValue> {
-    let dpr = device_pixel_ratio.max(1.0);
-    let css_w = css_width.max(120.0);
-
-    let (meta, blocks) = analyze_page(html, page_url).map_err(|e| JsValue::from_str(&e))?;
-
-    canvas.set_width((css_w * dpr).round().max(1.0) as u32);
-    canvas.set_height(1);
-
-    let ctx = canvas_context(canvas)?;
-    let _ = ctx.scale(dpr, dpr);
-
-    let height = paint_canvas::measure_content_height(&ctx, css_w, &meta.title, &blocks)?;
-
-    canvas.set_height((height * dpr).round().max(1.0) as u32);
-    let ctx = canvas_context(canvas)?;
-    let _ = ctx.scale(dpr, dpr);
-    paint_canvas::fill_and_draw(&ctx, css_w, height, &meta.title, &blocks)?;
-
-    let out = PaintResult {
-        url: meta.url,
-        title: meta.title,
-        links: meta.links,
-        height_css_px: height,
-    };
+    let analyzed = analyze_page(html, page_url).map_err(|e| JsValue::from_str(&e))?;
+    let out = blitz_wasm::paint_blitz_async(
+        canvas,
+        html,
+        page_url,
+        &analyzed.page,
+        css_width,
+        device_pixel_ratio,
+    )
+    .await?;
     serde_wasm_bindgen::to_value(&out).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
-/// Fetch then [`paint_document_html`].
+#[cfg(not(target_arch = "wasm32"))]
+#[wasm_bindgen(js_name = paintDocumentHtml)]
+pub async fn paint_document_html(
+    _canvas: &HtmlCanvasElement,
+    _html: &str,
+    _page_url: &str,
+    _css_width: f64,
+    _device_pixel_ratio: f64,
+) -> Result<JsValue, JsValue> {
+    Err(JsValue::from_str("paintDocumentHtml is wasm-only"))
+}
+
+async fn fetch_text_with_cors(url: &str) -> Result<String, JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let opts = web_sys::RequestInit::new();
+    opts.set_method("GET");
+    opts.set_mode(web_sys::RequestMode::Cors);
+
+    let request = web_sys::Request::new_with_str_and_init(url, &opts)
+        .map_err(|_| JsValue::from_str("invalid request"))?;
+
+    let resp_val = JsFuture::from(window.fetch_with_request(&request))
+        .await
+        .map_err(|_| JsValue::from_str("fetch failed"))?;
+
+    let resp: web_sys::Response = resp_val
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("bad response"))?;
+
+    if !resp.ok() {
+        return Err(JsValue::from_str(&format!("HTTP {}", resp.status())));
+    }
+
+    let text_val = JsFuture::from(resp.text().map_err(|_| JsValue::from_str("no body"))?)
+        .await
+        .map_err(|_| JsValue::from_str("read failed"))?;
+
+    text_val
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("empty body"))
+}
+
+async fn inline_stylesheets_for_blitz(html: &str, fetch_url: &str) -> String {
+    let Ok(dom) = parse_rcdom(html) else {
+        return html.to_string();
+    };
+    let root = dom.document.clone();
+    let base = document_url::effective_base_url(fetch_url, &root);
+    let mut hrefs = Vec::new();
+    collect_stylesheet_hrefs(&root, &mut hrefs);
+    hrefs.truncate(24);
+
+    let mut css = String::new();
+    for href in hrefs {
+        let abs = if let Some(ref b) = base {
+            if let Ok(u) = b.join(&href) {
+                u.to_string()
+            } else {
+                continue;
+            }
+        } else {
+            continue;
+        };
+        let fetch_css_url = document_url::subresource_fetch_url(fetch_url, &abs);
+        if let Ok(txt) = fetch_text_with_cors(&fetch_css_url).await {
+            css.push_str("\n/* ");
+            css.push_str(&abs);
+            css.push_str(" */\n");
+            css.push_str(&txt);
+        }
+    }
+    if css.is_empty() {
+        return html.to_string();
+    }
+
+    let injected = format!("<style>{css}</style>");
+    if html.contains("</head>") {
+        html.replacen("</head>", &(injected + "</head>"), 1)
+    } else {
+        format!("{injected}{html}")
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(js_name = fetchAndPaint)]
 pub async fn fetch_and_paint(
     canvas: &HtmlCanvasElement,
@@ -158,70 +224,35 @@ pub async fn fetch_and_paint(
     css_width: f64,
     device_pixel_ratio: f64,
 ) -> Result<JsValue, JsValue> {
-    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
-    let opts = web_sys::RequestInit::new();
-    opts.set_method("GET");
-    opts.set_mode(web_sys::RequestMode::Cors);
-
-    let request = web_sys::Request::new_with_str_and_init(url, &opts)
-        .map_err(|_| JsValue::from_str("invalid URL or request"))?;
-
-    let resp_val = JsFuture::from(window.fetch_with_request(&request))
-        .await
-        .map_err(|_| {
-            JsValue::from_str("network/CORS error — try another URL or a CORS-friendly page")
-        })?;
-
-    let resp: web_sys::Response = resp_val
-        .dyn_into()
-        .map_err(|_| JsValue::from_str("bad response"))?;
-
-    if !resp.ok() {
-        return Err(JsValue::from_str(&format!("HTTP {}", resp.status())));
-    }
-
-    let text_val = JsFuture::from(resp.text().map_err(|_| JsValue::from_str("no text body"))?)
-        .await
-        .map_err(|_| JsValue::from_str("read error"))?;
-
-    let html = text_val
-        .as_string()
-        .ok_or_else(|| JsValue::from_str("empty body"))?;
-
-    paint_document_html(canvas, &html, url, css_width, device_pixel_ratio)
+    let html = fetch_text_with_cors(url).await?;
+    let html = inline_stylesheets_for_blitz(&html, url).await;
+    let analyzed = analyze_page(&html, url).map_err(|e| JsValue::from_str(&e))?;
+    let out = blitz_wasm::paint_blitz_async(
+        canvas,
+        &html,
+        url,
+        &analyzed.page,
+        css_width,
+        device_pixel_ratio,
+    )
+    .await?;
+    serde_wasm_bindgen::to_value(&out).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
-/// Fetch a URL with the browser’s `fetch` and return [`RenderedPage`]
+#[cfg(not(target_arch = "wasm32"))]
+#[wasm_bindgen(js_name = fetchAndPaint)]
+pub async fn fetch_and_paint(
+    _canvas: &HtmlCanvasElement,
+    _url: &str,
+    _css_width: f64,
+    _device_pixel_ratio: f64,
+) -> Result<JsValue, JsValue> {
+    Err(JsValue::from_str("fetchAndPaint is wasm-only"))
+}
+
 #[wasm_bindgen(js_name = fetchAndRender)]
 pub async fn fetch_and_render(url: &str) -> Result<JsValue, JsValue> {
-    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
-    let opts = web_sys::RequestInit::new();
-    opts.set_method("GET");
-    opts.set_mode(web_sys::RequestMode::Cors);
-
-    let request = web_sys::Request::new_with_str_and_init(url, &opts)
-        .map_err(|_| JsValue::from_str("invalid URL or request"))?;
-
-    let resp_val = JsFuture::from(window.fetch_with_request(&request))
-        .await
-        .map_err(|_| JsValue::from_str("network/CORS error — try another URL or a CORS-friendly page"))?;
-
-    let resp: web_sys::Response = resp_val
-        .dyn_into()
-        .map_err(|_| JsValue::from_str("bad response"))?;
-
-    if !resp.ok() {
-        return Err(JsValue::from_str(&format!("HTTP {}", resp.status())));
-    }
-
-    let text_val = JsFuture::from(resp.text().map_err(|_| JsValue::from_str("no text body"))?)
-        .await
-        .map_err(|_| JsValue::from_str("read error"))?;
-
-    let html = text_val
-        .as_string()
-        .ok_or_else(|| JsValue::from_str("empty body"))?;
-
+    let html = fetch_text_with_cors(url).await?;
     render_document(&html, url)
 }
 
@@ -294,6 +325,35 @@ fn collect_hrefs(handle: &Handle, out: &mut Vec<String>) {
     }
     for child in handle.children.borrow().iter() {
         collect_hrefs(child, out);
+    }
+}
+
+fn collect_stylesheet_hrefs(handle: &Handle, out: &mut Vec<String>) {
+    if let NodeData::Element { name, attrs, .. } = &handle.data {
+        if name.local == local_name!("link") {
+            let attrs = attrs.borrow();
+            let mut rel_ok = false;
+            let mut href: Option<String> = None;
+            for a in attrs.iter() {
+                if a.name.local == local_name!("rel") {
+                    rel_ok = a
+                        .value
+                        .to_ascii_lowercase()
+                        .split_whitespace()
+                        .any(|v| v == "stylesheet");
+                } else if a.name.local == local_name!("href") {
+                    href = Some(a.value.to_string());
+                }
+            }
+            if rel_ok {
+                if let Some(h) = href {
+                    out.push(h);
+                }
+            }
+        }
+    }
+    for child in handle.children.borrow().iter() {
+        collect_stylesheet_hrefs(child, out);
     }
 }
 

@@ -1,4 +1,6 @@
-//! Canvas 2D paint: word-wrap using real `measureText`, then draw.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code))]
+//! Canvas 2D paint: word-wrap using real `measureText`, then draw (fixed typography, no page CSS).
+//! Used when the library is built for non-WASM targets; WASM uses Blitz (`blitz_wasm`).
 use crate::flow::FlowBlock;
 use wasm_bindgen::JsValue;
 use web_sys::CanvasRenderingContext2d;
@@ -15,7 +17,16 @@ const ACCENT: &str = "#2c4aa3";
 const RULE: &str = "#c9ced8";
 const PAPER: &str = "#f5f5f2";
 
-/// Full content height in **CSS pixels** (logical coordinates after `ctx.scale(dpr, dpr)`).
+fn heading_style(level: u8) -> (&'static str, f64, f64) {
+    match level {
+        1 => ("700 28px ui-sans-serif, system-ui, sans-serif", 32.0, 14.0),
+        2 => ("700 22px ui-sans-serif, system-ui, sans-serif", 26.0, 12.0),
+        3 => ("650 19px ui-sans-serif, system-ui, sans-serif", 24.0, 10.0),
+        4 => ("650 17px ui-sans-serif, system-ui, sans-serif", 22.0, 8.0),
+        _ => ("600 16px ui-sans-serif, system-ui, sans-serif", 22.0, 8.0),
+    }
+}
+
 pub fn measure_content_height(
     ctx: &CanvasRenderingContext2d,
     css_width: f64,
@@ -177,16 +188,6 @@ fn draw_content(
         }
     }
     Ok(())
-}
-
-fn heading_style(level: u8) -> (&'static str, f64, f64) {
-    match level {
-        1 => ("700 28px ui-sans-serif, system-ui, sans-serif", 32.0, 14.0),
-        2 => ("700 22px ui-sans-serif, system-ui, sans-serif", 26.0, 12.0),
-        3 => ("650 19px ui-sans-serif, system-ui, sans-serif", 24.0, 10.0),
-        4 => ("650 17px ui-sans-serif, system-ui, sans-serif", 22.0, 8.0),
-        _ => ("600 16px ui-sans-serif, system-ui, sans-serif", 22.0, 8.0),
-    }
 }
 
 fn wrap_hard_break(

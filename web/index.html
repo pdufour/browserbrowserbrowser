@@ -162,16 +162,15 @@
         id="url"
         type="text"
         spellcheck="false"
-        placeholder="https://example.com"
-        value="https://example.com"
+        placeholder="https://corsproxy.io/?https://…"
+        value="https://corsproxy.io/?https://news.ycombinator.com/"
       />
       <button type="button" class="primary" id="go">Go</button>
       <button type="button" id="demo">Demo HTML</button>
     </div>
     <div class="hint">
-      <strong>html5ever</strong> parses the document; Rust lays out lines using the real canvas
-      <code>measureText</code> API, then paints headings, paragraphs, lists, <code>pre</code>, and
-      <code>hr</code> (subset renderer — not Servo/WebRender). CORS still applies to <code>fetch</code>.
+      Rust parses with <strong>html5ever</strong> and renders to canvas in WASM.
+      Links use the real page URL behind a proxy when applicable. <strong>Go</strong> fetches HTML; CORS still applies.
     </div>
     <div class="layout">
       <div class="canvas-shell" id="canvas-shell">

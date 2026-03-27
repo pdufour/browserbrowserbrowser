@@ -1,3 +1,4 @@
+#![cfg_attr(target_arch = "wasm32", allow(dead_code))]
 //! Block-level structure extracted from the Servo html5ever DOM (subset).
 use markup5ever::local_name;
 use markup5ever_rcdom::{Handle, NodeData};
