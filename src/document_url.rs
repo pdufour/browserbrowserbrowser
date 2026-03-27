@@ -13,19 +13,10 @@ pub fn document_target_url(fetch_url: &str) -> String {
         return fetch_url.to_string();
     }
     if let Some(q) = u.query() {
-        let q_trim = q.trim();
-        if let Ok(inner) = Url::parse(q_trim) {
+        if let Ok(inner) = Url::parse(q.trim()) {
             if inner.has_host() {
                 return inner.to_string();
             }
-        }
-        for (key, value) in url::form_urlencoded::parse(q.as_bytes()) {
-            if key == "url" || key == "u" {
-                return value.into_owned();
-            }
-        }
-        if q_trim.starts_with("http://") || q_trim.starts_with("https://") {
-            return q_trim.to_string();
         }
     }
     fetch_url.to_string()

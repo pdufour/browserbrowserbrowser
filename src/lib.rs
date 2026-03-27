@@ -12,7 +12,6 @@ use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::CanvasRenderingContext2d;
 use web_sys::HtmlCanvasElement;
 
 #[wasm_bindgen(start)]
@@ -23,17 +22,6 @@ pub fn main() {
 #[derive(Serialize)]
 pub struct PaintResult {
     pub height_css_px: f64,
-}
-
-pub(crate) fn canvas_context(
-    canvas: &HtmlCanvasElement,
-) -> Result<CanvasRenderingContext2d, JsValue> {
-    canvas
-        .get_context("2d")
-        .map_err(|_| JsValue::from_str("canvas 2d"))?
-        .ok_or_else(|| JsValue::from_str("2d unsupported"))?
-        .dyn_into()
-        .map_err(|_| JsValue::from_str("2d context"))
 }
 
 async fn fetch_text_with_cors(url: &str) -> Result<String, JsValue> {

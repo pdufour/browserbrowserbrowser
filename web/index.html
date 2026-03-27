@@ -12,7 +12,6 @@
         --border: #2d3648;
         --text: #e8ecf3;
         --muted: #8b95a8;
-        --accent: #6c9eff;
         --surface: #131823;
       }
       * {
@@ -44,11 +43,6 @@
         border-bottom: 1px solid var(--border);
         flex-wrap: wrap;
       }
-      .chrome label {
-        font-size: 0.75rem;
-        color: var(--muted);
-        white-space: nowrap;
-      }
       .chrome input[type="text"] {
         flex: 1;
         min-width: 12rem;
@@ -76,13 +70,6 @@
       .chrome button:disabled {
         opacity: 0.5;
         cursor: not-allowed;
-      }
-      .hint {
-        padding: 0.35rem 0.75rem;
-        font-size: 0.78rem;
-        color: var(--muted);
-        border-bottom: 1px solid var(--border);
-        background: #141821;
       }
       .layout {
         flex: 1;
@@ -112,7 +99,6 @@
   </head>
   <body>
     <div class="chrome">
-      <label for="url">URL</label>
       <input
         id="url"
         type="text"
@@ -121,9 +107,6 @@
         value="https://corsproxy.io/?https://news.ycombinator.com/"
       />
       <button type="button" class="primary" id="go">Go</button>
-    </div>
-    <div class="hint">
-      Blitz renders HTML/CSS to canvas in WASM (WebGPU required). CORS still applies.
     </div>
     <div class="layout">
       <div class="canvas-shell" id="canvas-shell">

@@ -16,14 +16,11 @@ use vello::wgpu::{self, BufferDescriptor, BufferUsages, Extent3d, TexelCopyBuffe
 use wgpu_context::WGPUContext;
 use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene};
 
-use crate::canvas_context;
 use crate::PaintResult;
 
 const MAX_PX_HEIGHT: u32 = 16_384;
-const DEFAULT_FONT_URLS: &[&str] = &[
-    "https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf",
-    "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf",
-];
+const DEFAULT_FONT_URLS: &[&str] =
+    &["https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"];
 
 async fn fetch_bytes_with_cors(url: &str) -> Result<Vec<u8>, JsValue> {
     let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
@@ -252,7 +249,12 @@ pub async fn paint_blitz_async(
 
     canvas.set_width(phys_w);
     canvas.set_height(phys_h);
-    let ctx = canvas_context(canvas)?;
+    let ctx: web_sys::CanvasRenderingContext2d = canvas
+        .get_context("2d")
+        .map_err(|_| JsValue::from_str("canvas 2d"))?
+        .ok_or_else(|| JsValue::from_str("2d unsupported"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("2d context"))?;
     ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
         .map_err(|_| JsValue::from_str("setTransform"))?;
 
