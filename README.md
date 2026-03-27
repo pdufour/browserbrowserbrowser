@@ -22,21 +22,32 @@ cargo run --bin serve-web
 
 Open [http://127.0.0.1:8080/](http://127.0.0.1:8080/) (or pass a port: `cargo run --bin serve-web -- 3000`). You need a local server so the WASM ES module loads; `file://` will not work.
 
-## Architecture (one paragraph)
+## Architecture
 
-The **real** browser tab loads a normal page. That page runs **Rust compiled to WebAssembly**. The WASM module **fetches HTML** (via `fetch`, often through a CORS proxy), **parses and styles** it with **[Blitz](https://github.com/DioxusLabs/blitz)** ([Stylo](https://github.com/servo/servo) for CSS, [Taffy](https://github.com/DioxusLabs/taffy) for layout), **rasterizes** with **[Vello](https://github.com/linebender/vello)** on **[wgpu](https://github.com/gfx-rs/wgpu)** (WebGPU in the tab), reads back pixels, and draws them with **`CanvasRenderingContext2D.putImageData`** into a `<canvas>`. There is no nested `<iframe>` doing the page for you: the “inner browser” is this pipeline inside the same tab.
+What happens in the tab:
 
-Blitz’s own WASM story is tracked in **[Request: wasm support #160](https://github.com/DioxusLabs/blitz/issues/160)**. Upstream is aimed at **native shells** (full app + windowing). This repo **does not wait for that**: it pulls in only the **library crates** ([**blitz-dom**](https://github.com/DioxusLabs/blitz/tree/main/packages/blitz-dom), [**blitz-html**](https://github.com/DioxusLabs/blitz/tree/main/packages/blitz-html), [**blitz-paint**](https://github.com/DioxusLabs/blitz/tree/main/packages/blitz-paint), [**blitz-traits**](https://github.com/DioxusLabs/blitz/tree/main/packages/blitz-traits)), links them for **`wasm32-unknown-unknown`**, and supplies the missing “browser chrome” itself.
+- You open a **normal page** (HTML + JS). Nothing special about the host URL.
+- That page loads **Rust compiled to WebAssembly**.
+- WASM uses **`fetch`** to load HTML (often wrapped in a **CORS proxy** so the response is allowed).
+- The bytes go through **[Blitz](https://github.com/DioxusLabs/blitz)** — **[Stylo](https://github.com/servo/servo)** for CSS, **[Taffy](https://github.com/DioxusLabs/taffy)** for layout.
+- **Vector paint** is **[Vello](https://github.com/linebender/vello)** on **[wgpu](https://github.com/gfx-rs/wgpu)** (**WebGPU**).
+- The frame is **read back** from the GPU and copied with **`CanvasRenderingContext2D.putImageData`** into a **`<canvas>`**.
+- There is **no nested `<iframe>`** acting as the renderer. The “inner browser” is **this pipeline**, in the same tab.
 
-### Workarounds in practice
+Upstream & this repo:
 
-| Gap (why #160 exists) | What we do instead |
-| --------------------- | ------------------ |
-| No turnkey Blitz-in-WASM product | Use **wasm-bindgen** + a tiny JS host; export **`fetchAndPaint`** only. |
-| Navigation / net / fonts in a real shell | **`fetch` in WASM** for the main document; **html5ever** walks the tree and **inlines `<link rel=stylesheet>`** via more fetches (often need a **CORS proxy**); **`DummyNetProvider`** + explicit **`load_resource`** for a **CORS-hosted webfont** (e.g. Inter) so text isn’t invisible. |
-| “Where do pixels go?” | **Vello → wgpu WebGPU texture → GPU readback → `putImageData`** on a 2D canvas (no native surface, no `blitz-shell`). |
+- Blitz’s WASM direction is discussed in **[#160 — wasm support](https://github.com/DioxusLabs/blitz/issues/160)**.
+- Blitz upstream targets **native shells** (full app, windowing). **We don’t use that path.**
+- We depend only on the **library crates**: [**blitz-dom**](https://github.com/DioxusLabs/blitz/tree/main/packages/blitz-dom), [**blitz-html**](https://github.com/DioxusLabs/blitz/tree/main/packages/blitz-html), [**blitz-paint**](https://github.com/DioxusLabs/blitz/tree/main/packages/blitz-paint), [**blitz-traits**](https://github.com/DioxusLabs/blitz/tree/main/packages/blitz-traits).
+- They’re built for **`wasm32-unknown-unknown`**. Our page supplies the **chrome** (fetch UI, canvas, `wasm-bindgen` glue).
 
-So the workaround is: **treat Blitz as an embeddable renderer**, not as the full Dioxus/native demo app, and **own I/O + raster presentation** in the embedding page.
+### Workarounds (why there’s no “official” Blitz-in-WASM app yet)
+
+- **Glue** — **`wasm-bindgen`** + a thin host; one export, **`fetchAndPaint`**.
+- **HTTP + CSS** — WASM **`fetch`** for the document. **[html5ever](https://github.com/servo/html5ever)** finds stylesheets; we **fetch** them and **inject `<style>`** (proxy if CORS blocks). Fonts: **`load_resource`** with a **CORS-friendly** URL (e.g. Inter).
+- **Surface** — **WebGPU texture → CPU readback → `putImageData`**. No **`blitz-shell`** window.
+
+Treat Blitz as a **library renderer**; this repo owns **I/O** and **how pixels hit the canvas**.
 
 ## Super simple flow
 
@@ -63,29 +74,3 @@ The page is tiny: initialize WASM, then hand the canvas and URL to one exported 
 2. **`paint_blitz_async`**: build an **`HtmlDocument`**, **resolve** layout for the viewport, record a **Vello `Scene`**, **render to a texture**, **copy to CPU**, **putImageData** on the canvas.
 
 That is the whole idea: **network + engine in WASM, pixels on canvas**, still a normal web page.
-
-| Path | Role |
-| ---- | ---- |
-| [`web/index.html`](web/index.html) | Host UI + loads `./pkg/inner_browser.js` |
-| [`src/lib.rs`](src/lib.rs) | `fetchAndPaint` — fetch, stylesheet inlining, call paint |
-| [`src/blitz_wasm.rs`](src/blitz_wasm.rs) | Blitz document, Vello scene, GPU readback, `putImageData` |
-| [`src/bin/serve_web.rs`](src/bin/serve_web.rs) | Static server for `web/` |
-
-## Repos (stack)
-
-| Piece | Repository |
-| ----- | ---------- |
-| Blitz monorepo | [DioxusLabs/blitz](https://github.com/DioxusLabs/blitz) |
-| GPU vector raster | [linebender/vello](https://github.com/linebender/vello) |
-| Vello backend for paint trait | [DioxusLabs/anyrender](https://github.com/DioxusLabs/anyrender) (`anyrender_vello`) |
-| WebGPU in Rust | [gfx-rs/wgpu](https://github.com/gfx-rs/wgpu) |
-| HTML parsing (inlining helpers here) | [servo/html5ever](https://github.com/servo/html5ever) |
-
-### Blitz crates used here (paths in the monorepo)
-
-| Crate | `packages/…` |
-| ----- | ------------- |
-| **blitz-dom** | [packages/blitz-dom](https://github.com/DioxusLabs/blitz/tree/main/packages/blitz-dom) |
-| **blitz-html** | [packages/blitz-html](https://github.com/DioxusLabs/blitz/tree/main/packages/blitz-html) |
-| **blitz-paint** | [packages/blitz-paint](https://github.com/DioxusLabs/blitz/tree/main/packages/blitz-paint) |
-| **blitz-traits** | [packages/blitz-traits](https://github.com/DioxusLabs/blitz/tree/main/packages/blitz-traits) |
