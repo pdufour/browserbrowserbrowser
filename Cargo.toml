@@ -1,0 +1,44 @@
+[package]
+name = "inner-browser"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal browser-like page handling compiled to WebAssembly (Servo html5ever parser)"
+
+[lib]
+crate-type = ["cdylib"]
+
+[[bin]]
+name = "serve-web"
+path = "src/bin/serve_web.rs"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+tower-http = { version = "0.6", features = ["fs"] }
+
+console_error_panic_hook = "0.1"
+html-escape = "0.2"
+html5ever = "0.38"
+js-sys = "0.3"
+markup5ever = "0.38"
+markup5ever_rcdom = "0.38.0"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+url = "2.5"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+  "CanvasRenderingContext2d",
+  "console",
+  "Headers",
+  "HtmlCanvasElement",
+  "Request",
+  "RequestInit",
+  "RequestMode",
+  "Response",
+  "TextMetrics",
+  "Window",
+]

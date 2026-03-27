@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inner browser (Rust → WASM)</title>
+    <style>
+      :root {
+        color-scheme: dark light;
+        --bg: #0f1217;
+        --chrome: #1a1f2a;
+        --border: #2d3648;
+        --text: #e8ecf3;
+        --muted: #8b95a8;
+        --accent: #6c9eff;
+        --surface: #131823;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .chrome {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        padding: 0.6rem 0.75rem;
+        background: var(--chrome);
+        border-bottom: 1px solid var(--border);
+        flex-wrap: wrap;
+      }
+      .chrome label {
+        font-size: 0.75rem;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .chrome input[type="text"] {
+        flex: 1;
+        min-width: 12rem;
+        padding: 0.45rem 0.6rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
+        font-size: 0.9rem;
+      }
+      .chrome button {
+        padding: 0.45rem 0.9rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: linear-gradient(180deg, #2a3345, #222a3a);
+        color: var(--text);
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+      .chrome button.primary {
+        border-color: #3d4f75;
+        background: linear-gradient(180deg, #355091, #2a4080);
+        color: #fff;
+      }
+      .chrome button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .hint {
+        padding: 0.35rem 0.75rem;
+        font-size: 0.78rem;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        background: #141821;
+      }
+      .layout {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 280px;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        min-height: 0;
+      }
+      @media (max-width: 900px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+      .canvas-shell {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #0a0c10;
+        overflow: auto;
+        min-height: 200px;
+      }
+      #page {
+        display: block;
+        width: 100%;
+        vertical-align: top;
+      }
+      .panel {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface);
+        padding: 0.85rem 1rem;
+        overflow: auto;
+        max-height: calc(100vh - 7rem);
+      }
+      .panel h2 {
+        margin: 0 0 0.5rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .panel .doc-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--accent);
+        margin: 0 0 0.35rem;
+      }
+      .panel .meta {
+        font-size: 0.78rem;
+        color: var(--muted);
+        word-break: break-all;
+        margin-bottom: 0.75rem;
+      }
+      .panel ul {
+        margin: 0;
+        padding-left: 1.1rem;
+        font-size: 0.82rem;
+      }
+      .panel li {
+        margin: 0.25rem 0;
+        word-break: break-all;
+      }
+      .viewport {
+        padding: 1rem;
+        color: var(--muted);
+      }
+      .error {
+        color: #ff8b8b;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="chrome">
+      <label for="url">URL</label>
+      <input
+        id="url"
+        type="text"
+        spellcheck="false"
+        placeholder="https://example.com"
+        value="https://example.com"
+      />
+      <button type="button" class="primary" id="go">Go</button>
+      <button type="button" id="demo">Demo HTML</button>
+    </div>
+    <div class="hint">
+      <strong>html5ever</strong> parses the document; Rust lays out lines using the real canvas
+      <code>measureText</code> API, then paints headings, paragraphs, lists, <code>pre</code>, and
+      <code>hr</code> (subset renderer — not Servo/WebRender). CORS still applies to <code>fetch</code>.
+    </div>
+    <div class="layout">
+      <div class="canvas-shell" id="canvas-shell">
+        <canvas id="page" width="300" height="150" hidden aria-label="Rendered page"></canvas>
+        <div class="viewport" id="placeholder">Loading WASM…</div>
+      </div>
+      <aside class="panel" id="panel">
+        <h2>Document</h2>
+        <p class="doc-title" id="doc-title">—</p>
+        <div class="meta" id="doc-url">—</div>
+        <h2>Links</h2>
+        <ul id="link-list"><li class="muted">—</li></ul>
+      </aside>
+    </div>
+
+    <script type="module">
+      import init, {
+        fetchAndPaint,
+        paintDocumentHtml,
+      } from "./pkg/inner_browser.js";
+
+      const canvas = document.getElementById("page");
+      const shell = document.getElementById("canvas-shell");
+      const placeholder = document.getElementById("placeholder");
+      const panel = document.getElementById("panel");
+      const docTitleEl = document.getElementById("doc-title");
+      const docUrlEl = document.getElementById("doc-url");
+      const linkList = document.getElementById("link-list");
+      const urlInput = document.getElementById("url");
+      const goBtn = document.getElementById("go");
+      const demoBtn = document.getElementById("demo");
+
+      function escapeHtml(s) {
+        return s
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function showPanel(meta) {
+        docTitleEl.textContent = meta.title || "(no title)";
+        docUrlEl.textContent = meta.url || "";
+        if (meta.links?.length) {
+          linkList.innerHTML = meta.links.map((h) => `<li>${escapeHtml(h)}</li>`).join("");
+        } else {
+          linkList.innerHTML = '<li class="muted">No links found</li>';
+        }
+      }
+
+      function showError(msg) {
+        placeholder.hidden = false;
+        placeholder.innerHTML = `<p class="error"><strong>Error</strong> — ${escapeHtml(msg)}</p>`;
+        canvas.hidden = true;
+      }
+
+      function cssWidth() {
+        return Math.max(120, shell.clientWidth - 2);
+      }
+
+      async function runPaint(fn) {
+        goBtn.disabled = demoBtn.disabled = true;
+        placeholder.hidden = false;
+        placeholder.textContent = "Rendering…";
+        canvas.hidden = true;
+        try {
+          const dpr = window.devicePixelRatio || 1;
+          const w = cssWidth();
+          const meta = await fn(w, dpr);
+          placeholder.hidden = true;
+          canvas.hidden = false;
+          canvas.style.width = "100%";
+          canvas.style.height = `${meta.height_css_px}px`;
+          showPanel(meta);
+        } catch (e) {
+          showError(e instanceof Error ? e.message : String(e));
+        } finally {
+          goBtn.disabled = demoBtn.disabled = false;
+        }
+      }
+
+      await init();
+      placeholder.textContent = "Enter a URL or run the demo.";
+
+      goBtn.addEventListener("click", () => {
+        const url = urlInput.value.trim();
+        if (!url) return;
+        runPaint((w, dpr) => fetchAndPaint(canvas, url, w, dpr));
+      });
+
+      demoBtn.addEventListener("click", () => {
+        const html = `<!DOCTYPE html><html><head><title>Demo page</title></head>
+          <body>
+            <h1>Hello from demo HTML</h1>
+            <p>This exercises the parser and canvas renderer without the network.</p>
+            <hr/>
+            <h2>List</h2>
+            <ul><li>One</li><li>Two</li></ul>
+            <pre>fn main() {
+  println!("preformatted");
+}</pre>
+            <p><a href="/foo">relative</a> · <a href="https://example.com/abs">absolute</a></p>
+          </body></html>`;
+        runPaint((w, dpr) =>
+          paintDocumentHtml(canvas, html, "https://demo.invalid/page", w, dpr),
+        );
+      });
+
+    </script>
+  </body>
+  </html>
