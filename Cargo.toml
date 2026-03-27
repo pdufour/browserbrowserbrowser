@@ -12,16 +12,6 @@ crate-type = ["cdylib"]
 name = "serve-web"
 path = "src/bin/serve_web.rs"
 
-[[bin]]
-name = "blitz-native"
-path = "src/bin/blitz_native.rs"
-required-features = ["blitz-native"]
-
-[features]
-default = []
-# Native-only: real HTML/CSS via DioxusLabs/blitz (master). Not available on wasm32.
-blitz-native = ["dep:blitz"]
-
 [dependencies]
 console_error_panic_hook = "0.1"
 html-escape = "0.2"
@@ -63,7 +53,5 @@ wgpu_context = "0.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 axum = "0.8"
-# default `net` avoids a compile bug in blitz when `net` is off (DummyNetProvider / `event_loop`).
-blitz = { git = "https://github.com/DioxusLabs/blitz", branch = "main", package = "blitz", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 tower-http = { version = "0.6", features = ["fs"] }

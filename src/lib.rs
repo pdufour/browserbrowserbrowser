@@ -1,9 +1,9 @@
 //! Inner “browser”: WASM build uses **Dioxus Blitz** (Stylo + Taffy + Vello) to render HTML/CSS offscreen,
 //! then draws RGBA into `<canvas>`. Requires WebGPU.
 
-mod document_url;
 #[cfg(target_arch = "wasm32")]
 mod blitz_wasm;
+mod document_url;
 
 use html5ever::driver::parse_document;
 use html5ever::tendril::TendrilSink;
@@ -12,9 +12,9 @@ use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::HtmlCanvasElement;
 #[cfg(target_arch = "wasm32")]
 use web_sys::CanvasRenderingContext2d;
+use web_sys::HtmlCanvasElement;
 
 #[wasm_bindgen(start)]
 pub fn main() {
@@ -39,12 +39,6 @@ pub struct PaintResult {
 
 pub(crate) struct AnalyzedPage {
     pub page: RenderedPage,
-}
-
-#[wasm_bindgen(js_name = renderDocument)]
-pub fn render_document(html: &str, page_url: &str) -> Result<JsValue, JsValue> {
-    let analyzed = analyze_page(html, page_url).map_err(|e| JsValue::from_str(&e))?;
-    serde_wasm_bindgen::to_value(&analyzed.page).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 fn parse_rcdom(html: &str) -> Result<RcDom, String> {
@@ -105,7 +99,9 @@ fn analyze_page(html: &str, page_url: &str) -> Result<AnalyzedPage, String> {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) fn canvas_context(canvas: &HtmlCanvasElement) -> Result<CanvasRenderingContext2d, JsValue> {
+pub(crate) fn canvas_context(
+    canvas: &HtmlCanvasElement,
+) -> Result<CanvasRenderingContext2d, JsValue> {
     canvas
         .get_context("2d")
         .map_err(|_| JsValue::from_str("canvas 2d"))?
@@ -252,12 +248,6 @@ pub async fn fetch_and_paint(
     _device_pixel_ratio: f64,
 ) -> Result<JsValue, JsValue> {
     Err(JsValue::from_str("fetchAndPaint is wasm-only"))
-}
-
-#[wasm_bindgen(js_name = fetchAndRender)]
-pub async fn fetch_and_render(url: &str) -> Result<JsValue, JsValue> {
-    let html = fetch_text_with_cors(url).await?;
-    render_document(&html, url)
 }
 
 fn find_first_element<F>(handle: &Handle, pred: F) -> Option<Handle>
