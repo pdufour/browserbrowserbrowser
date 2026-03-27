@@ -1,6 +1,7 @@
 //! Resolve the real document URL behind a fetch URL (e.g. CORS proxy) for correct relative link resolution.
 use markup5ever::local_name;
 use markup5ever_rcdom::{Handle, NodeData};
+#[cfg(target_arch = "wasm32")]
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use url::Url;
 
@@ -47,6 +48,7 @@ pub fn effective_base_url(fetch_url: &str, root: &Handle) -> Option<Url> {
         .or(Some(doc_url))
 }
 
+#[cfg(target_arch = "wasm32")]
 /// URL used to fetch a subresource. If the document was fetched via corsproxy.io,
 /// subresources are wrapped through the same proxy.
 pub fn subresource_fetch_url(fetch_url: &str, absolute_subresource_url: &str) -> String {

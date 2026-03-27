@@ -12,7 +12,9 @@ use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
+use web_sys::HtmlCanvasElement;
+#[cfg(target_arch = "wasm32")]
+use web_sys::CanvasRenderingContext2d;
 
 #[wasm_bindgen(start)]
 pub fn main() {
@@ -102,6 +104,7 @@ fn analyze_page(html: &str, page_url: &str) -> Result<AnalyzedPage, String> {
     Ok(AnalyzedPage { page })
 }
 
+#[cfg(target_arch = "wasm32")]
 pub(crate) fn canvas_context(canvas: &HtmlCanvasElement) -> Result<CanvasRenderingContext2d, JsValue> {
     canvas
         .get_context("2d")
@@ -175,6 +178,7 @@ async fn fetch_text_with_cors(url: &str) -> Result<String, JsValue> {
         .ok_or_else(|| JsValue::from_str("empty body"))
 }
 
+#[cfg(target_arch = "wasm32")]
 async fn inline_stylesheets_for_blitz(html: &str, fetch_url: &str) -> String {
     let Ok(dom) = parse_rcdom(html) else {
         return html.to_string();
@@ -328,6 +332,7 @@ fn collect_hrefs(handle: &Handle, out: &mut Vec<String>) {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 fn collect_stylesheet_hrefs(handle: &Handle, out: &mut Vec<String>) {
     if let NodeData::Element { name, attrs, .. } = &handle.data {
         if name.local == local_name!("link") {

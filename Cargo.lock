@@ -1703,7 +1703,6 @@ dependencies = [
 name = "inner-browser"
 version = "0.1.0"
 dependencies = [
- "anyrender",
  "anyrender_vello",
  "axum",
  "blitz",

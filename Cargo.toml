@@ -48,12 +48,10 @@ features = [
   "RequestInit",
   "RequestMode",
   "Response",
-  "TextMetrics",
   "Window",
 ]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-anyrender = "0.8"
 anyrender_vello = "0.8"
 blitz-dom = { git = "https://github.com/DioxusLabs/blitz", branch = "main", package = "blitz-dom" }
 blitz-html = { git = "https://github.com/DioxusLabs/blitz", branch = "main", package = "blitz-html" }
