@@ -25,14 +25,6 @@ pub struct PaintResult {
     pub height_css_px: f64,
 }
 
-fn parse_rcdom(html: &str) -> Result<RcDom, String> {
-    let dom = RcDom::default();
-    parse_document(dom, html5ever::ParseOpts::default())
-        .from_utf8()
-        .read_from(&mut std::io::Cursor::new(html.as_bytes()))
-        .map_err(|e| e.to_string())
-}
-
 pub(crate) fn canvas_context(
     canvas: &HtmlCanvasElement,
 ) -> Result<CanvasRenderingContext2d, JsValue> {
@@ -75,7 +67,11 @@ async fn fetch_text_with_cors(url: &str) -> Result<String, JsValue> {
 }
 
 async fn inline_stylesheets_for_blitz(html: &str, fetch_url: &str) -> String {
-    let Ok(dom) = parse_rcdom(html) else {
+    let dom = RcDom::default();
+    let Ok(dom) = parse_document(dom, html5ever::ParseOpts::default())
+        .from_utf8()
+        .read_from(&mut std::io::Cursor::new(html.as_bytes()))
+    else {
         return html.to_string();
     };
     let root = dom.document.clone();
@@ -97,9 +93,7 @@ async fn inline_stylesheets_for_blitz(html: &str, fetch_url: &str) -> String {
         };
         let fetch_css_url = document_url::subresource_fetch_url(fetch_url, &abs);
         if let Ok(txt) = fetch_text_with_cors(&fetch_css_url).await {
-            css.push_str("\n/* ");
-            css.push_str(&abs);
-            css.push_str(" */\n");
+            css.push('\n');
             css.push_str(&txt);
         }
     }

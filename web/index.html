@@ -141,22 +141,11 @@
       const urlInput = document.getElementById("url");
       const goBtn = document.getElementById("go");
 
-      function escapeHtml(s) {
-        return s
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;");
-      }
-
       function showError(msg) {
         placeholder.hidden = false;
-        placeholder.innerHTML = `<p class="error"><strong>Error</strong> — ${escapeHtml(msg)}</p>`;
+        placeholder.textContent = `Error: ${msg}`;
+        placeholder.classList.add("error");
         canvas.hidden = true;
-      }
-
-      function cssWidth() {
-        return Math.max(120, shell.clientWidth - 2);
       }
 
       async function runPaint(fn) {
@@ -166,9 +155,10 @@
         canvas.hidden = true;
         try {
           const dpr = window.devicePixelRatio || 1;
-          const w = cssWidth();
+          const w = Math.max(120, shell.clientWidth - 2);
           const meta = await fn(w, dpr);
           placeholder.hidden = true;
+          placeholder.classList.remove("error");
           canvas.hidden = false;
           canvas.style.width = "100%";
           canvas.style.height = `${meta.height_css_px}px`;
@@ -180,7 +170,7 @@
       }
 
       await init();
-      placeholder.textContent = "Enter a URL or run the demo.";
+      placeholder.textContent = "Enter a URL and click Go.";
 
       goBtn.addEventListener("click", () => {
         const url = urlInput.value.trim();
